@@ -1,6 +1,6 @@
 # Pwnagotchi
 
-[Pwnagotchi](https://twitter.com/pwnagotchi) is an "AI" that learns from the WiFi environment and instruments bettercap in order to maximize the WPA key material (any form of handshake that is crackable, including [PMKIDs](https://www.evilsocket.net/2019/02/13/Pwning-WiFi-networks-with-bettercap-and-the-PMKID-client-less-attack/), full and half WPA handshakes) captured. 
+[Pwnagotchi](https://twitter.com/pwnagotchi) is an "AI" that learns from the WiFi environment and instruments bettercap in order to maximize the WPA key material (any form of handshake that is crackable, including [PMKIDs](https://www.evilsocket.net/2019/02/13/Pwning-WiFi-networks-with-bettercap-and-the-PMKID-client-less-attack/), full and half WPA handshakes) captured.
 
 ![handshake](https://i.imgur.com/pdA4vCZ.png)
 
@@ -51,6 +51,47 @@ The UI is available either via display if installed, or via http://10.0.0.2:8080
 * **UP**: Time since the unit has been activated.
 * **PWND**: Number of handshakes captured in this session and number of unique networks we own at least one handshake of, from the beginning.
 * **AUTO**: This indicates that the algorithm is running with AI disabled (or still loading), it disappears once the AI dependencies have been bootrapped and the neural network loaded.
+
+### Install
+#### Get the image on the raspi
+```bash
+wget https://downloads.raspberrypi.org/raspbian/images/raspbian-2019-04-09/2019-04-08-raspbian-stretch.zip
+unzip 2019....zip
+sudo dd if=rasbian.img of=/dev/sdb? status=progress
+sudo mount /dev/sdb1 /mnt
+sudo touch /mnt/ssh
+sudo umount /mnt
+sudo mount /dev/sdb2 /mnt
+sudo -i
+vim /mnt/etc/network/interfaces
+#auto lo
+#
+#iface lo inet loopback
+#
+#allow-hotplug wlan0
+#iface wlan0 inet dhcp
+#wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+#iface default inet dhcp
+vim /mnt/etc/wpa_supplicant/wpa_supplicant.conf
+#country=GB
+#ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+#update_config=1
+#
+#network={
+#        ssid="YourWiFiName"
+#        psk="y0urw1f!p455w0rd"
+#        key_mgmt=WPA-PSK
+#}
+umount /mnt
+```
+### Copy your key
+`ssh-copy-id root@pi`
+
+### Run ansible
+Now change the `config.custom.yaml` and run
+
+`ansible-playbook -i <IP_of_PI>, install.yaml`
+
 
 ### Random Info
 

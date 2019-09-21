@@ -8,5 +8,6 @@ do
 	sleep 0.3
 done
 
-echo 0 >/sys/class/leds/led0/brightness
+# 1 = led is off; safe the juice!!
+echo 1 >/sys/class/leds/led0/brightness
 sleep 0.3

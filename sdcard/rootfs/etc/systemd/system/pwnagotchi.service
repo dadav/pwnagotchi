@@ -1,0 +1,10 @@
+[Unit]
+Description=Pwnagotchi Autostart
+
+[Service]
+Type=forking
+ExecStart=/root/pwnagotchi/scripts/startup.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

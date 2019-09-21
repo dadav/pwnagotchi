@@ -1,0 +1,247 @@
+---
+- hosts: all
+  remote_user: root
+  vars_files:
+    - sdcard/rootfs/root/pwnagotchi/config.yml
+    - config.custom.yaml
+  tasks:
+  - name: Install dependencies from distro
+    package:
+      name: "{{ packages }}"
+    vars:
+      packages:
+        - git
+        - vim
+        - screen
+        - build-essential
+        - libpcap-dev
+        - libusb-1.0-0-dev
+        - libnetfilter-queue-dev
+        - dphys-swapfile
+        - libopenmpi-dev
+        - libatlas-base-dev
+
+  - name: Remove distro golang (at least 1.9 is needed)
+    package:
+      name: golang
+      state: absent
+
+  - name: Update pip
+    pip:
+      name: pip
+      executable: pip3
+      state: latest
+
+  - name: Update setuptools
+    pip:
+      name: setuptools
+      executable: pip3
+      state: latest
+
+  - name: Install golang-1.11
+    unarchive:
+      src: https://storage.googleapis.com/golang/go1.11.8.linux-armv6l.tar.gz
+      dest: /usr/local/
+      remote_src: yes
+      creates: /usr/local/go/bin/go
+
+  - name: Set link to go binary
+    file:
+      src: /usr/local/go/bin/go
+      dest: /usr/bin/go
+      state: link
+
+  - name: Configure swap
+    lineinfile:
+      path: /etc/dphys-swapfile
+      regexp: "^CONF_SWAPSIZE="
+      line: "CONF_SWAPSIZE=1024"
+
+  - name: Enable service dphys-swapfile
+    service:
+      name: dphys-swapfile
+      enabled: yes
+    register: swap
+
+  - name: Reboot if swap added
+    reboot:
+    when: swap.changed
+
+  - name: Install (normal) pip dependencies
+    pip:
+      name: "{{ packages }}"
+      executable: pip3
+    vars:
+      packages:
+        - file_read_backwards
+        - pyyaml
+        - requests
+        - Crypto
+        - scapy
+        - tweepy
+
+  - name: Install tensorflow
+    pip:
+      name: "https://www.piwheels.org/simple/tensorflow/tensorflow-1.14.0-cp35-none-linux_armv6l.whl"
+      executable: pip3
+      extra_args: "--no-cache-dir"
+    when: ai.enabled == true
+
+  - name: Install (AI) pip dependencies
+    pip:
+      name: "{{ packages }}"
+      executable: pip3
+    vars:
+      packages:
+        - stable-baselines
+        - numpy
+        - gym
+    when: ai.enabled == true
+
+  - name: Install waveshare deps
+    pip:
+      name: "{{ packages }}"
+      executable: pip3
+    vars:
+      packages:
+        - spidev
+        - RPi.GPIO
+    when: ui.display.enabled == True
+
+  - name: Compile bettercap
+    command: go get -u github.com/bettercap/bettercap
+    environment:
+      GOPATH: /root/go
+    args:
+      creates: /usr/bin/bettercap
+    register: bettercap
+
+  - name: Copy bettercap-binary to /usr/bin/
+    copy:
+      remote_src: true
+      src: /root/go/bin/bettercap
+      dest: /usr/bin/bettercap
+      mode: '0744'
+    when: bettercap.rc == 0
+
+  - name: Install bettercap-caplets
+    shell: bettercap -eval "caplets.update; ui.update; q"
+    args:
+      creates: /usr/local/share/bettercap/caplets/http-ui.cap
+
+  - name: Install pwnagotchi
+    block:
+    - name: Copy pwnagotchi files
+      copy:
+        src: sdcard/rootfs/root/pwnagotchi
+        dest: /root/
+        mode: '0755'
+
+    - name: Replace interface in screenrc
+      replace:
+        path: "/root/pwnagotchi/data/{{ item }}"
+        regexp: 'mon0'
+        replace: "{{ main.iface }}"
+      with_items:
+        - screenrc.auto
+        - screenrc.manual
+
+    - name: Copy boot config.txt and cmdline.txt
+      copy:
+        src: "{{ item }}"
+        dest: /boot/
+      with_items:
+        - sdcard/boot/config.txt
+        - sdcard/boot/cmdline.txt
+        - sdcard/boot/ssh
+
+    - name: Set hostname
+      copy:
+        content: "{{ pi.hostname }}"
+        dest: /etc/hostname
+
+    - name: Set motd
+      copy:
+        content: "(◕‿‿◕) {{ pi.hostname }} (pwnagotchi)"
+        dest: /etc/motd
+
+    - name: Write hosts-entry
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127.0.0.1'
+        line: "127.0.0.1 localhost {{ pi.hostname }} {{ pi.hostname }}.local"
+
+    - name: Copy system configs
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+      with_items:
+        - { src: 'sdcard/rootfs/etc/network/interfaces', dest: '/etc/network/interfaces' }
+        - { src: 'sdcard/rootfs/etc/ssh/sshd_config', dest: '/etc/ssh/sshd_config' }
+        - { src: 'sdcard/rootfs/etc/systemd/system/pwnagotchi.service', dest: '/etc/systemd/system/pwnagotchi.service' }
+
+    - name: Enable service
+      systemd:
+        name: pwnagotchi.service
+        daemon_reload: true
+        enabled: true
+
+    - name: Save altered config
+      copy:
+        content: "{{ {'main':main} | combine({'ai': ai}, recursive=True) | combine({'ui':ui}, recursive=True) | combine({'twitter': twitter}, recursive=True) | combine({'bettercap':bettercap}, recursive=True) | combine({'personality':personality}, recursive=True) | to_nice_yaml(indent=2,width=1337) }}"
+        dest: /root/pwnagotchi/config.yml
+
+  - name: Install monstop
+    copy:
+      dest: /usr/bin/monstop
+      mode: '0755'
+      content: |
+        #!/bin/bash
+        interface={{ main.iface }}
+        ifconfig ${interface} down
+        sleep 1
+        iw dev ${interface} del
+
+  - name: Install monstart
+    copy:
+      dest: /usr/bin/monstart
+      mode: '0755'
+      content: |
+        interface={{ main.iface }}
+        echo "Bring up monitor mode interface ${interface}"
+        iw phy phy0 interface add ${interface} type monitor
+        ifconfig ${interface} up
+        if [ $? -eq 0 ]; then
+            echo "started monitor interface on ${interface}"
+        fi
+
+  - name: Install Re4son-Kernel
+    block:
+      - name: Add an Apt signing key, uses whichever key is at the URL
+        apt_key:
+          url: https://re4son-kernel.com/keys/http/archive-key.asc
+          state: present
+
+      - apt_repository:
+          repo: deb http://http.re4son-kernel.com/re4son/ kali-pi main
+          state: present
+
+      - name: Install Re4son-kernel
+        apt:
+          name: "{{ item }}"
+          update_cache: true
+        with_items:
+          - kalipi-kernel
+          - kalipi-bootloader
+          - kalipi-re4son-firmware
+          - kalipi-kernel-headers
+          - libraspberrypi0
+          - libraspberrypi-dev
+          - libraspberrypi-doc
+          - libraspberrypi-bin
+        register: kernel
+
+      - name: Reboot with new kernel
+        reboot:
+        when: kernel.changed
+
