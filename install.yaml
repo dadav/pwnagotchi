@@ -82,6 +82,7 @@
         - Crypto
         - scapy
         - tweepy
+        - gast=0.2.2
 
   - name: Install tensorflow
     pip:
