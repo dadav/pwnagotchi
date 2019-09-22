@@ -163,8 +163,8 @@ class View(object):
 
         for step in range(0, 10):
             # if we weren't in a normal state before goin
-            # to sleep, keep that face and status on for 
-            # a while, otherwise the sleep animation will 
+            # to sleep, keep that face and status on for
+            # a while, otherwise the sleep animation will
             # always override any minor state change before it
             if was_normal or step > 5:
                 if sleeping:

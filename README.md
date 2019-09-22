@@ -102,6 +102,27 @@ Now change the `config.custom.yaml` and run
 - if connected to a laptop via usb data port, with internet connectivity shared, magic things will happen.
 - checkout the `ui.video` section of the `config.yml` - if you don't want to use a display, you can connect to it with the browser and a cable.
 
+
+### Connect via usb
+Use the network-config from this repository and on the host do the following:
+
+#### Deactivate NetworkManager for that interface
+Connect it via usb and type `ip a` to get the new interface name. It should be something like `enp0s26u1u2`.
+Open `/etc/NetworkManager/NetworkManager.conf` and add the following to the end:
+
+```bash
+[keyfile]
+unmanaged-devices=interface-name:enp0s26u1u2
+```
+
+Now we need to add an ip to that interface and bring it up.
+```bash
+sudo ip link set enp0s26u2 up
+sudo ip addr add 10.0.0.1/24 brd + dev enp0s26u1u2
+```
+
+Now you should be able to ping your pi! :)
+
 Magic scripts that makes it talk to the internet:
 
 ```sh
@@ -114,15 +135,16 @@ USB_IFACE_NET=10.0.0.0/24
 # host interface to use for upstream connection
 UPSTREAM_IFACE=enxe4b97aa99867
 
-ip addr add $USB_IFACE_IP/24 dev $USB_IFACE
-ifconfig $USB_IFACE up
+# we already did this in the previous step
+sudo ip addr add $USB_IFACE_IP/24 dev $USB_IFACE
+sudo ip link set $USB_IFACE up
 
-iptables -A FORWARD -o $UPSTREAM_IFACE -i $USB_IFACE -s $USB_IFACE_NET -m conntrack --ctstate NEW -j ACCEPT
-iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-iptables -t nat -F POSTROUTING
-iptables -t nat -A POSTROUTING -o $UPSTREAM_IFACE -j MASQUERADE
+sudo iptables -A FORWARD -o $UPSTREAM_IFACE -i $USB_IFACE -s $USB_IFACE_NET -m conntrack --ctstate NEW -j ACCEPT
+sudo iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -t nat -F POSTROUTING
+sudo iptables -t nat -A POSTROUTING -o $UPSTREAM_IFACE -j MASQUERADE
 
-echo 1 > /proc/sys/net/ipv4/ip_forward
+sudo sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
 ```
 
 ## License

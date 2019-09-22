@@ -20,6 +20,7 @@
         - dphys-swapfile
         - libopenmpi-dev
         - libatlas-base-dev
+        - libjasper-dev
 
   - name: Remove distro golang (at least 1.9 is needed)
     package:
